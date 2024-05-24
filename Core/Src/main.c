@@ -255,40 +255,40 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 void ProcessData(){
 
 	HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_SET);
-//	 volatile static float leftIn, rightIn;
-//	 volatile static float leftOut, rightOut;
-//
-//	 for (uint16_t i =0; i<(RECORD_BUFFER_SIZE/2)-1 ; i+=2){
-//
-//
-//	 		/*Audio Input convert to float Left Channel*/
-//		 	leftIn = (1.0f/32768.0f)* RecordBufferPtr[i];
-//
-//		 	/*Clip sample values > 1.0f*/
-//	 		if (leftIn > 1.0f){
-//	 			leftIn -= 2.0f;
-//	 		}
-//
-//	 		/*Audio Input convert to float Right Channel*/
-//	 		rightIn = (1.0f/32768.0f)* RecordBufferPtr[i+1];
-//
-//	 		/*Clip sample values > 1.0f*/
-//	 		if (rightIn > 1.0f){
-//	 			rightIn -= 2.0f;
-//	 		 }
-//
-//	 		/*Do some processing*/
-//	 		//arm_biquad_cascade_df2T_f32(&IIR_L_kick, &leftIn, &leftOut, 1);
-//	 		//arm_biquad_cascade_df2T_f32(&IIR_R_kick, &rightIn, &rightOut, 1);
-//
-//	 		leftOut = leftIn;
-//	 		rightOut = rightIn;
-//
-//	 		/*Convert back to int16*/
-//	 		PlaybackBufferPtr[i] =(int16_t) (32768.0f * leftOut);
-//	 		PlaybackBufferPtr[i+1] = (int16_t) (32768.0f * rightOut);
-//
-//	 }
+	 volatile static float leftIn, rightIn;
+	 volatile static float leftOut, rightOut;
+
+	 for (uint16_t i =0; i<(RECORD_BUFFER_SIZE/2)-1 ; i+=2){
+
+
+	 		/*Audio Input convert to float Left Channel*/
+		 	leftIn = (1.0f/32768.0f)* RecordBufferPtr[i];
+
+		 	/*Clip sample values > 1.0f*/
+	 		if (leftIn > 1.0f){
+	 			leftIn -= 2.0f;
+	 		}
+
+	 		/*Audio Input convert to float Right Channel*/
+	 		rightIn = (1.0f/32768.0f)* RecordBufferPtr[i+1];
+
+	 		/*Clip sample values > 1.0f*/
+	 		if (rightIn > 1.0f){
+	 			rightIn -= 2.0f;
+	 		 }
+
+	 		/*Do some processing*/
+	 		//arm_biquad_cascade_df2T_f32(&IIR_L_kick, &leftIn, &leftOut, 1);
+	 		//arm_biquad_cascade_df2T_f32(&IIR_R_kick, &rightIn, &rightOut, 1);
+
+	 		leftOut = leftIn;
+	 		rightOut = rightIn;
+
+	 		/*Convert back to int16*/
+	 		PlaybackBufferPtr[i] =(int16_t) (32768.0f * leftOut);
+	 		PlaybackBufferPtr[i+1] = (int16_t) (32768.0f * rightOut);
+
+	 }
 
 	 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_RESET);
 }
