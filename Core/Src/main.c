@@ -47,7 +47,7 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define RECORD_BUFFER_SIZE 512
+#define RECORD_BUFFER_SIZE 1024
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -74,7 +74,7 @@ int16_t right_channel[RECORD_BUFFER_SIZE];
 static volatile int16_t *RecordBufferPtr = &RecordBuffer;
 static volatile int16_t *PlaybackBufferPtr = &PlaybackBuffer;
 
-uint8_t dataReadyFlag;
+volatile uint8_t dataReadyFlag;
 
 /*Buffer and Variables ADC1 Channel on Pins A0, A1, A2*/
 uint16_t AdcValues[3];
@@ -147,6 +147,7 @@ int main(void)
     /* USER CODE END WHILE */
 	  if(dataReadyFlag){
 		  ProcessData();
+		  dataReadyFlag = 0;
 	  }
     /* USER CODE BEGIN 3 */
   }
@@ -278,15 +279,16 @@ void ProcessData(){
 	 		 }
 
 	 		/*Do some processing*/
-	 		//arm_biquad_cascade_df2T_f32(&IIR_L_kick, &leftIn, &leftOut, 1);
-	 		//arm_biquad_cascade_df2T_f32(&IIR_R_kick, &rightIn, &rightOut, 1);
+	 		arm_biquad_cascade_df2T_f32(&IIR_L_kick, &leftIn, &leftOut, 1);
+	 		arm_biquad_cascade_df2T_f32(&IIR_R_kick, &rightIn, &rightOut, 1);
 
-	 		leftOut = leftIn;
-	 		rightOut = rightIn;
+//	 		leftOut = leftIn;
+//	 		rightOut = rightIn;
 
 	 		/*Convert back to int16*/
 	 		PlaybackBufferPtr[i] =(int16_t) (32768.0f * leftOut);
 	 		PlaybackBufferPtr[i+1] = (int16_t) (32768.0f * rightOut);
+
 
 	 }
 

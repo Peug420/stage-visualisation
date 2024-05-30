@@ -1,6 +1,5 @@
-../Drivers/STM32F7xx_HAL_Driver/Src/stm32f7xx_hal_dma.c:1192:17:DMA_CalcBaseAndBitshift	4	static
 ../Drivers/STM32F7xx_HAL_Driver/Src/stm32f7xx_hal_dma.c:171:19:HAL_DMA_Init	16	static
-../Drivers/STM32F7xx_HAL_Driver/Src/stm32f7xx_hal_dma.c:311:19:HAL_DMA_DeInit	16	static
+../Drivers/STM32F7xx_HAL_Driver/Src/stm32f7xx_hal_dma.c:311:19:HAL_DMA_DeInit	8	static
 ../Drivers/STM32F7xx_HAL_Driver/Src/stm32f7xx_hal_dma.c:409:19:HAL_DMA_Start	8	static
 ../Drivers/STM32F7xx_HAL_Driver/Src/stm32f7xx_hal_dma.c:453:19:HAL_DMA_Start_IT	12	static
 ../Drivers/STM32F7xx_HAL_Driver/Src/stm32f7xx_hal_dma.c:516:19:HAL_DMA_Abort	16	static

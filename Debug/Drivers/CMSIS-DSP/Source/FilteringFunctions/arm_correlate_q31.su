@@ -1,1 +1,1 @@
-../Drivers/CMSIS-DSP/Source/FilteringFunctions/arm_correlate_q31.c:258:6:arm_correlate_q31	80	static
+../Drivers/CMSIS-DSP/Source/FilteringFunctions/arm_correlate_q31.c:258:6:arm_correlate_q31	56	static

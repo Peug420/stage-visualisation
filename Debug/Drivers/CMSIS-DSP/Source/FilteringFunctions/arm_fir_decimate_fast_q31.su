@@ -1,1 +1,1 @@
-../Drivers/CMSIS-DSP/Source/FilteringFunctions/arm_fir_decimate_fast_q31.c:61:6:arm_fir_decimate_fast_q31	48	static
+../Drivers/CMSIS-DSP/Source/FilteringFunctions/arm_fir_decimate_fast_q31.c:61:6:arm_fir_decimate_fast_q31	80	static
