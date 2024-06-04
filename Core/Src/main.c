@@ -24,7 +24,6 @@
 #include "sai.h"
 #include "tim.h"
 #include "gpio.h"
-//#include "arm_math.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -32,7 +31,7 @@
 #include "Codec.h"
 #include "dsp/filtering_functions.h"
 //#include "iir_break"	// iir filter coefficients
-#include "iir_kick.h"
+#include "iir_kick_96.h"
 //#include "iir_melody"
 /* USER CODE END Includes */
 
@@ -47,11 +46,11 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define RECORD_BUFFER_SIZE 1024
+#define RECORD_BUFFER_SIZE 4096 // 1024*4=4096 bei 96khz (x2stereo + x2 double buffer = x4)                 (512*4=2048 bei 48khz)
 #define MIN_ENERGY 1000
 #define NUM_SHORT_AVR 4
 #define NUM_BEAT_HIST 6
-#define KICK_THRESH 5
+#define KICK_THRESH 4
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -73,6 +72,9 @@ arm_biquad_cascade_df2T_instance_f32 IIR_R_kick;
 
 //variables
 uint16_t kick_ema = 0;
+uint32_t kick_value = 0;
+uint16_t short_avr_energy = 0;
+uint16_t kick_transformed = 0;
 
 //arrays
 uint16_t 	short_avr_buffer[NUM_SHORT_AVR];
@@ -163,9 +165,9 @@ int main(void)
   {
     /* USER CODE END WHILE */
 	  if(dataReadyFlag){
-		  ProcessData();
-		  dataReadyFlag = 0;
-	  }
+	  		  ProcessData();
+	  		  dataReadyFlag = 0;
+	  	  }
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -272,7 +274,10 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 
 void ProcessData(){
 
-	HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_14, GPIO_PIN_SET); //HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_SET);
+	//HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);//LD1
+	HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_SET);	//LD2
+	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);//LD3
+
 	 volatile static float leftIn, rightIn;
 	 volatile static float leftOut, rightOut;
 	 volatile static float kick_leftOut, kick_rightOut;
@@ -280,7 +285,7 @@ void ProcessData(){
 	 uint16_t right = 0;
 
 	 //volatile static float break_leftOut, break_rightOut;
-	 uint32_t kick_value = 0;
+	 //uint32_t kick_value = 0;
 	 uint32_t break_value = 0;
 
 	 for (uint16_t i =0; i<(RECORD_BUFFER_SIZE/2)-1 ; i+=2){
@@ -309,14 +314,19 @@ void ProcessData(){
 	 		arm_biquad_cascade_df2T_f32(&IIR_L_kick, &leftIn, &leftOut, 1);
 	 		arm_biquad_cascade_df2T_f32(&IIR_R_kick, &rightIn, &rightOut, 1);
 
-	 		kick_leftOut  = fabs(kick_leftOut);
-	 		kick_rightOut = fabs(kick_rightOut);
+	 		kick_leftOut  = fabs(leftOut);
+	 		kick_rightOut = fabs(rightOut);
 
-	 		left  = (uint16_t) (65536.0f * kick_leftOut);
-	 		right = (uint16_t) (65536.0f * kick_rightOut);
+	 		//left  = (uint16_t) (65536.0f * kick_leftOut);
+	 		//right = (uint16_t) (65536.0f * kick_rightOut);
+
+	 		left  = (32768.0f * kick_leftOut);
+	 		right = (32768.0f * kick_rightOut);
 
 
 	 		//kick_value += (left + right) / 2;
+	 		//kick_value += (left + right);
+	 		kick_value += (left * 2);
 	 		//break_value += (uint16_t)((fabs(break_leftOut) + fabs(break_rightOut)) / 2);
 
 	 		//leftOut = leftIn;
@@ -326,36 +336,39 @@ void ProcessData(){
 	 		PlaybackBufferPtr[i] =(int16_t) (32768.0f * leftOut);
 	 		PlaybackBufferPtr[i+1] = (int16_t) (32768.0f * rightOut);
 
-	 		kick_value = fabs(PlaybackBufferPtr[i]) + fabs(PlaybackBufferPtr[i+1]);
+	 		//kick_value = fabs(PlaybackBufferPtr[i]) + fabs(PlaybackBufferPtr[i+1]);
 
 
 	 }
 
-	 kick_value = kick_value / (RECORD_BUFFER_SIZE/2);
-	 //break_value = break_value / (RECORD_BUFFER_SIZE/2);
+	 kick_value = kick_value / (RECORD_BUFFER_SIZE/4);
+	 //break_value = break_value / (RECORD_BUFFER_SIZE/4);
 
-	 uint16_t short_avr_energy  = cal_short_avr(kick_value);
-	 uint16_t kick_transformed  = transform_exp(short_avr_energy,7000,4);
+	 short_avr_energy  = cal_short_avr(kick_value);
+	 kick_transformed  = transform_exp(short_avr_energy,7000,4);
 	 kick_ema          			= cal_ema(kick_transformed, 0.01, kick_ema);
 	 //uint16_t kick_avr          = kick_ema * KICK_THRESH;
 
-	 if (MIN_ENERGY < kick_transformed > (kick_ema * KICK_THRESH)){ //and not (break_energy_value < break_threshold): # detect beat
-		 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_SET);
-//		 if(beat_history(1) == 1){
-//			 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_SET);
-//		 }
-//		 else{
-//			 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_RESET);
-//		 }
+	 if ((MIN_ENERGY < kick_transformed) && (kick_transformed > (kick_ema * KICK_THRESH))){ //and not (break_energy_value < break_threshold): # detect beat
+		 if(beat_history(1) == 1){
+		 	 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);//LD1
+		 	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);//LD3
+		 }
+		 else{
+			 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+		 }
 	 }
 	 else{
-		 //beat_history(0);
-		 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_RESET);
+		 beat_history(0);
+		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+		 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);//LD1
 	 }
 
 
 
-	 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_14, GPIO_PIN_RESET);
+	 //HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);
+	 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_RESET);
+	 //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
 }
 
 uint16_t cal_short_avr(uint16_t energy){
@@ -442,3 +455,4 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
+

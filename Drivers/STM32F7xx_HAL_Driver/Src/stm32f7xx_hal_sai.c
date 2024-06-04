@@ -1970,7 +1970,7 @@ static HAL_StatusTypeDef SAI_InitI2S(SAI_HandleTypeDef *hsai, uint32_t protocol,
     hsai->Init.ClockStrobing     = SAI_CLOCKSTROBING_RISINGEDGE;
   }
   hsai->FrameInit.FSDefinition   = SAI_FS_CHANNEL_IDENTIFICATION;
-  hsai->SlotInit.SlotActive      = SAI_SLOTACTIVE_0 | SAI_SLOTACTIVE_2; //SAI_SLOTACTIVE_ALL;
+  hsai->SlotInit.SlotActive      = SAI_SLOTACTIVE_ALL;
   hsai->SlotInit.FirstBitOffset  = 0;
   hsai->SlotInit.SlotNumber      = nbslot;
 
