@@ -43,7 +43,7 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  C:/Users/Zeng/STM32CubeIDE/Workspace_Test/STM32F769_Audio_Init/Drivers/CMSIS-DSP/Include/dsp/support_functions.h \
  C:/Users/Zeng/STM32CubeIDE/Workspace_Test/STM32F769_Audio_Init/Drivers/CMSIS-DSP/Include/dsp/fast_math_functions.h \
  C:/Users/Zeng/STM32CubeIDE/Workspace_Test/STM32F769_Audio_Init/Drivers/CMSIS-DSP/Include/dsp/basic_math_functions.h \
- ../Core/Inc/iir_kick_96.h
+ ../Core/Inc/iir_filter.h
 ../Core/Inc/main.h:
 ../Drivers/STM32F7xx_HAL_Driver/Inc/stm32f7xx_hal.h:
 ../Core/Inc/stm32f7xx_hal_conf.h:
@@ -94,4 +94,4 @@ C:/Users/Zeng/STM32CubeIDE/Workspace_Test/STM32F769_Audio_Init/Drivers/CMSIS-DSP
 C:/Users/Zeng/STM32CubeIDE/Workspace_Test/STM32F769_Audio_Init/Drivers/CMSIS-DSP/Include/dsp/support_functions.h:
 C:/Users/Zeng/STM32CubeIDE/Workspace_Test/STM32F769_Audio_Init/Drivers/CMSIS-DSP/Include/dsp/fast_math_functions.h:
 C:/Users/Zeng/STM32CubeIDE/Workspace_Test/STM32F769_Audio_Init/Drivers/CMSIS-DSP/Include/dsp/basic_math_functions.h:
-../Core/Inc/iir_kick_96.h:
+../Core/Inc/iir_filter.h:

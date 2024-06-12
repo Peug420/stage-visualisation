@@ -31,8 +31,8 @@
 #include "Codec.h"
 #include "dsp/filtering_functions.h"
 //#include "iir_break"	// iir filter coefficients
-#include "iir_kick_96.h"
-//#include "iir_melody"
+//#include "iir_kick_96.h"			//#################################
+#include "iir_filter.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -47,10 +47,13 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 #define RECORD_BUFFER_SIZE 4096 // 1024*4=4096 bei 96khz (x2stereo + x2 double buffer = x4)                 (512*4=2048 bei 48khz)
-#define MIN_ENERGY 2000
+#define MIN_ENERGY 1000 //2000
 #define NUM_SHORT_AVR 4
+#define NUM_BREAK_AVR 100
 #define NUM_BEAT_HIST 15
 #define KICK_THRESH 4.5
+#define BREAK_DIF 0.8
+#define BREAK_THRESH 7000
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -60,25 +63,35 @@
 //float32_t state_R_break[2*STAGES];
 //float32_t state_L_kick[2*STAGES];
 //float32_t state_R_kick[2*STAGES];
-float32_t state_kick[2*STAGES];
+//float32_t state_kick[2*STAGES];//old with iir_kick_96							//#################################
 //float32_t state_L_melody[2*STAGES];
 //float32_t state_R_melody[2*STAGES];
+
+float32_t state_break[2*STAGES];
+float32_t state_kick[4*STAGES];//4*5Stages (2*10stages)
 
 //arm_biquad_cascade_df2T_instance_f32 IIR_L_break;	 // create IIR instances
 //arm_biquad_cascade_df2T_instance_f32 IIR_R_break;
 //arm_biquad_cascade_df2T_instance_f32 IIR_L_kick;
 //arm_biquad_cascade_df2T_instance_f32 IIR_R_kick;
-arm_biquad_cascade_df2T_instance_f32 IIR_kick;
 //arm_biquad_cascade_df2T_instance_f32 IIR_L_melody;
 //arm_biquad_cascade_df2T_instance_f32 IIR_R_melody;
+arm_biquad_cascade_df2T_instance_f32 IIR_break; 			//#################################
+arm_biquad_cascade_df2T_instance_f32 IIR_kick; 			//#################################
 
 //variables
-uint16_t kick_ema = 0;
-uint32_t kick_value = 0;
-uint16_t short_avr_energy = 0;
-uint16_t kick_transformed = 0;
+uint16_t 	kick_ema = 0;
+uint16_t 	break_ema = 0;
+int16_t  	slope_ema = 0;
+uint16_t 	slope_old_energy = 0;
+uint32_t 	kick_value = 0;
+uint32_t 	break_value = 0;
+uint16_t 	short_avr_energy = 0;
+uint16_t    break_avr = 0;
+uint16_t 	kick_transformed = 0;
 
 //arrays
+uint16_t 	break_avr_buffer[NUM_BREAK_AVR];
 uint16_t 	short_avr_buffer[NUM_SHORT_AVR];
 uint8_t		beat_hist_buffer[NUM_BEAT_HIST];
 
@@ -106,6 +119,8 @@ uint16_t cal_short_avr(uint16_t energy);
 uint16_t transform_exp(uint16_t value, uint16_t max_value, uint16_t exp);
 uint16_t cal_ema(uint16_t new_value, float alpha, uint16_t previous_ema);
 uint8_t beat_history(uint8_t is_beat);
+uint16_t cal_break_avr(uint16_t energy);
+int16_t cal_slope(uint16_t energy);
 
 /* USER CODE END PFP */
 
@@ -123,7 +138,9 @@ int main(void)
   /* USER CODE BEGIN 1 */
 	//arm_biquad_cascade_df2T_init_f32(&IIR_L_kick, STAGES, ba_coeff, state_L_kick);
 	//arm_biquad_cascade_df2T_init_f32(&IIR_R_kick, STAGES, ba_coeff, state_R_kick);
-	arm_biquad_cascade_df2T_init_f32(&IIR_kick, STAGES, ba_coeff, state_kick);
+	//arm_biquad_cascade_df2T_init_f32(&IIR_kick, STAGES, ba_coeff, state_kick); //old with iir_kick_96	   //#################################
+	arm_biquad_cascade_df2T_init_f32(&IIR_break, STAGES, ba_coeff_break, state_break);
+	arm_biquad_cascade_df2T_init_f32(&IIR_kick, 2*STAGES, ba_coeff_kick, state_kick);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -283,7 +300,7 @@ void ProcessData(){
 
 	 volatile static float leftIn, rightIn;
 	 volatile static float monoIn;
-	 volatile static float beatOut;
+	 volatile static float kickOut;
 	 volatile static float breakOut;
 	 volatile static float leftOut, rightOut;
 	 volatile static float kick_leftOut, kick_rightOut;
@@ -303,7 +320,7 @@ void ProcessData(){
 		 	/*Clip sample values > 1.0f*/
 	 		if (leftIn > 1.0f){
 	 			leftIn -= 2.0f;
-	 			HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
+	 			//HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
 	 		}
 
 	 		/*Audio Input convert to float Right Channel*/
@@ -312,7 +329,7 @@ void ProcessData(){
 	 		/*Clip sample values > 1.0f*/
 	 		if (rightIn > 1.0f){
 	 			rightIn -= 2.0f;
-	 			HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
+	 			//HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
 	 		 }
 
 	 		monoIn = (1.0f/32768.0f) * ((RecordBufferPtr[i] + RecordBufferPtr[i+1]) / 2);
@@ -321,8 +338,8 @@ void ProcessData(){
 	 		//arm_biquad_cascade_df2T_f32(&IIR_L_kick, &leftIn, &kick_leftOut, 1);
 	 		//arm_biquad_cascade_df2T_f32(&IIR_R_kick, &rightIn, &kick_rightOut, 1);
 
-	 		arm_biquad_cascade_df2T_f32(&IIR_kick, &monoIn, &beatOut, 1);
-	 		//arm_biquad_cascade_df2T_f32(&IIR_break, &monoIn, &breakOut, 1);
+	 		arm_biquad_cascade_df2T_f32(&IIR_kick, &monoIn, &kickOut, 1);			//#################################
+	 		arm_biquad_cascade_df2T_f32(&IIR_break, &monoIn, &breakOut, 1);
 
 	 		//kick_leftOut  = fabs(leftOut);
 	 		//kick_rightOut = fabs(rightOut);
@@ -331,21 +348,22 @@ void ProcessData(){
 	 		//right = (uint16_t) (65536.0f * kick_rightOut);
 
 	 		//left  = (32768.0f * kick_leftOut);
-	 		left  = (32768.0f * fabs(beatOut));
-	 		//right = (32768.0f * kick_rightOut);
+	 		left  = (32768.0f * fabs(kickOut));
+	 		right  = (32768.0f * fabs(breakOut));
 
 
 	 		//kick_value += (left + right) / 2;
 	 		//kick_value += (left + right);
 	 		kick_value += (left * 2);
+	 		break_value += (right * 2);
 	 		//break_value += (uint16_t)((fabs(break_leftOut) + fabs(break_rightOut)) / 2);
 
 	 		//leftOut = leftIn;
 	 		//rightOut = rightIn; //return audio in to audio out
 
 	 		/*Convert back to int16*/
-	 		PlaybackBufferPtr[i] =(int16_t) (1000.0f * leftIn); //(32768.0f * leftOut)
-	 		PlaybackBufferPtr[i+1] = (int16_t) (1000.0f * rightIn);
+	 		PlaybackBufferPtr[i] 	= (int16_t) (1000.0f * leftIn);  //(1000.0f * leftIn)
+	 		PlaybackBufferPtr[i+1] 	= (int16_t) (1000.0f * rightIn); //(32768.0f * rightIn)
 
 	 		//kick_value = fabs(PlaybackBufferPtr[i]) + fabs(PlaybackBufferPtr[i+1]);
 
@@ -357,7 +375,7 @@ void ProcessData(){
 
 	 short_avr_energy  = cal_short_avr(kick_value);
 	 kick_transformed  = transform_exp(short_avr_energy,9000,4);
-	 kick_ema          			= cal_ema(kick_transformed, 0.01, kick_ema);
+	 kick_ema          = cal_ema(kick_transformed, 0.01, kick_ema);
 	 //uint16_t kick_avr          = kick_ema * KICK_THRESH;
 
 	 if ((MIN_ENERGY < kick_transformed) && (kick_transformed > (kick_ema * KICK_THRESH))){ //and not (break_energy_value < break_threshold): # detect beat
@@ -373,9 +391,17 @@ void ProcessData(){
 		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
 	 }
 
+	 break_avr         = cal_break_avr(break_value);
+	 break_ema         = cal_ema(break_avr, 0.06, break_ema);
 
+	 if (((BREAK_DIF < (break_avr/break_ema) && 10 < cal_slope(break_ema))/*|| break_ema > BREAK_THRESH*/) && (!(break_ema < MIN_ENERGY) || !(BREAK_DIF > (break_avr/break_ema)))){
+		 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
+	 }
+	 else{
+		 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
+	 }
 
-	 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);
+	 //HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);
 	 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_RESET);
 	 //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
 }
@@ -396,6 +422,22 @@ uint16_t cal_short_avr(uint16_t energy){
 	return average / NUM_SHORT_AVR;
 }
 
+uint16_t cal_break_avr(uint16_t energy){
+	for (uint8_t val = NUM_BREAK_AVR; val > 0; val--) {
+		if (val > 1) {
+			break_avr_buffer[val - 1] = break_avr_buffer[val - 2]; //move value to next position
+	    }
+		else {
+			break_avr_buffer[val - 1] = energy; // add new value to first position
+	    }
+	}
+	uint16_t average = 0;
+	for (uint8_t n = 0; n < NUM_BREAK_AVR; n++) {
+		average += break_avr_buffer[n];
+	}
+	return average / NUM_BREAK_AVR;
+}
+
 uint16_t transform_exp(uint16_t value, uint16_t max_value, uint16_t exp){
 	uint16_t transformed_value = (pow(value, exp) / pow(max_value, (exp-1)));
 	if(transformed_value > max_value){
@@ -409,6 +451,13 @@ uint16_t cal_ema(uint16_t new_value, float alpha, uint16_t previous_ema){
 	return ema;
 }
 
+int16_t cal_slope(uint16_t energy){
+    int16_t slope = energy - slope_old_energy;
+    slope_old_energy = energy;
+    slope_ema = cal_ema(slope, 0.06, slope_ema);
+    return slope_ema;
+}
+
 uint8_t beat_history(uint8_t is_beat) {
     // Überprüfen, ob is_beat gültig ist
     if (is_beat != 0 && is_beat != 1) {
@@ -416,7 +465,7 @@ uint8_t beat_history(uint8_t is_beat) {
     }
 
     // Pufferwerte verschieben und neuen Wert hinzufügen
-    for (uint8_t val = NUM_BEAT_HIST; val > 0; val--) {
+    for (uint8_t val = NUM_BEAT_HIST; val > 0; val--){
         if (val > 1) {
             if (beat_hist_buffer[val - 2] != 0) {
             	is_beat = 0;
