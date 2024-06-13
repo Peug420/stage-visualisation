@@ -47,13 +47,16 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 #define RECORD_BUFFER_SIZE 4096 // 1024*4=4096 bei 96khz (x2stereo + x2 double buffer = x4)                 (512*4=2048 bei 48khz)
-#define MIN_ENERGY 1000 //2000
-#define NUM_SHORT_AVR 4
-#define NUM_BREAK_AVR 100
-#define NUM_BEAT_HIST 15
-#define KICK_THRESH 4.5
-#define BREAK_DIF 0.8
-#define BREAK_THRESH 7000
+#define MIN_ENERGY 1000 	//2000
+#define NUM_SHORT_AVR 4 	//4
+#define NUM_BREAK_AVR 100 	//100
+#define NUM_BEAT_HIST 15 	//15
+#define KICK_THRESH 4.5 	//4.5
+#define KICK_VAL 7000		//7000   //old 9000
+#define KICK_MAX 20000 		//20000
+#define BREAK_DIF 0.8 		//0.8
+#define BREAK_THRESH 7000 	//7000
+#define BREAK_SLOPE 1000 		//10
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -86,7 +89,7 @@ int16_t  	slope_ema = 0;
 uint16_t 	slope_old_energy = 0;
 uint32_t 	kick_value = 0;
 uint32_t 	break_value = 0;
-uint16_t 	short_avr_energy = 0;
+uint16_t 	kick_avr = 0;
 uint16_t    break_avr = 0;
 uint16_t 	kick_transformed = 0;
 
@@ -139,8 +142,8 @@ int main(void)
 	//arm_biquad_cascade_df2T_init_f32(&IIR_L_kick, STAGES, ba_coeff, state_L_kick);
 	//arm_biquad_cascade_df2T_init_f32(&IIR_R_kick, STAGES, ba_coeff, state_R_kick);
 	//arm_biquad_cascade_df2T_init_f32(&IIR_kick, STAGES, ba_coeff, state_kick); //old with iir_kick_96	   //#################################
-	arm_biquad_cascade_df2T_init_f32(&IIR_break, STAGES, ba_coeff_break, state_break);
-	arm_biquad_cascade_df2T_init_f32(&IIR_kick, 2*STAGES, ba_coeff_kick, state_kick);
+	arm_biquad_cascade_df2T_init_f32(&IIR_break, STAGES,   ba_coeff_break, state_break);
+	arm_biquad_cascade_df2T_init_f32(&IIR_kick,  2*STAGES, ba_coeff_kick,  state_kick);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -304,12 +307,12 @@ void ProcessData(){
 	 volatile static float breakOut;
 	 volatile static float leftOut, rightOut;
 	 volatile static float kick_leftOut, kick_rightOut;
-	 uint16_t left = 0;
-	 uint16_t right = 0;
+	// uint16_t kick = 0;
+	 //uint16_t right = 0;
 
 	 //volatile static float break_leftOut, break_rightOut;
-	 //uint32_t kick_value = 0;
-	 uint32_t break_value = 0;
+	 kick_value = 0;
+	 break_value = 0;
 
 	 for (uint16_t i =0; i<(RECORD_BUFFER_SIZE/2)-1 ; i+=2){
 
@@ -348,14 +351,14 @@ void ProcessData(){
 	 		//right = (uint16_t) (65536.0f * kick_rightOut);
 
 	 		//left  = (32768.0f * kick_leftOut);
-	 		left  = (32768.0f * fabs(kickOut));
-	 		right  = (32768.0f * fabs(breakOut));
+	 		//left  = (32768.0f * fabs(kickOut));
+	 		//right  = (32768.0f * fabs(breakOut));
 
 
 	 		//kick_value += (left + right) / 2;
 	 		//kick_value += (left + right);
-	 		kick_value += (left * 2);
-	 		break_value += (right * 2);
+	 		kick_value 	+= ((32768.0f * fabs(kickOut)) 	* 2);
+	 		break_value += ((32768.0f * fabs(breakOut)) * 2);
 	 		//break_value += (uint16_t)((fabs(break_leftOut) + fabs(break_rightOut)) / 2);
 
 	 		//leftOut = leftIn;
@@ -371,14 +374,14 @@ void ProcessData(){
 	 }
 
 	 kick_value = kick_value / (RECORD_BUFFER_SIZE/4);
-	 //break_value = break_value / (RECORD_BUFFER_SIZE/4);
+	 break_value = break_value / (RECORD_BUFFER_SIZE/4);
 
-	 short_avr_energy  = cal_short_avr(kick_value);
-	 kick_transformed  = transform_exp(short_avr_energy,9000,4);
-	 kick_ema          = cal_ema(kick_transformed, 0.01, kick_ema);
-	 //uint16_t kick_avr          = kick_ema * KICK_THRESH;
+	 kick_avr  			= cal_short_avr(kick_value);
+	 kick_transformed  	= transform_exp(kick_avr,KICK_VAL,4); //with old max energy: transform_exp(kick_avr,9000,4)
+	 kick_ema          	= cal_ema(kick_transformed, 0.01, kick_ema);
 
-	 if ((MIN_ENERGY < kick_transformed) && (kick_transformed > (kick_ema * KICK_THRESH))){ //and not (break_energy_value < break_threshold): # detect beat
+
+	 if ((KICK_VAL < kick_transformed) && (kick_transformed > (kick_ema * KICK_THRESH))){ //and not (break_energy_value < break_threshold): # detect beat
 		 if(beat_history(1) == 1){
 		 	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);//LD3
 		 }
@@ -391,14 +394,16 @@ void ProcessData(){
 		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
 	 }
 
-	 break_avr         = cal_break_avr(break_value);
-	 break_ema         = cal_ema(break_avr, 0.06, break_ema);
+	 break_avr         	= cal_break_avr(break_value);
+	 break_ema         	= cal_ema(break_avr, 0.06, break_ema);
 
-	 if (((BREAK_DIF < (break_avr/break_ema) && 10 < cal_slope(break_ema))/*|| break_ema > BREAK_THRESH*/) && (!(break_ema < MIN_ENERGY) || !(BREAK_DIF > (break_avr/break_ema)))){
+	 //if ((((BREAK_DIF < (break_avr / break_ema)) && (10 < cal_slope(break_ema))) || (break_ema > BREAK_THRESH)) && (!(break_ema < MIN_ENERGY) || !(BREAK_DIF > (break_avr/break_ema)))){
+	 //if (break_ema > BREAK_THRESH){
+	 if ((((BREAK_DIF < (break_avr / break_ema)) && (BREAK_SLOPE < cal_slope(break_ema))) || (break_ema > BREAK_THRESH)) && (!(break_ema < MIN_ENERGY))){
 		 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
 	 }
 	 else{
-		 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
+		 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);
 	 }
 
 	 //HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);
@@ -415,11 +420,11 @@ uint16_t cal_short_avr(uint16_t energy){
 	    	short_avr_buffer[val - 1] = energy; // add new value to first position
 	    }
 	}
-	uint16_t average = 0;
+	uint16_t kick_average = 0;
 	for (uint8_t n = 0; n < NUM_SHORT_AVR; n++) {
-		average += short_avr_buffer[n];
+		kick_average += ((1.0f/NUM_SHORT_AVR) * short_avr_buffer[n]);
 	}
-	return average / NUM_SHORT_AVR;
+	return kick_average;
 }
 
 uint16_t cal_break_avr(uint16_t energy){
@@ -431,17 +436,17 @@ uint16_t cal_break_avr(uint16_t energy){
 			break_avr_buffer[val - 1] = energy; // add new value to first position
 	    }
 	}
-	uint16_t average = 0;
+	uint16_t break_average = 0;
 	for (uint8_t n = 0; n < NUM_BREAK_AVR; n++) {
-		average += break_avr_buffer[n];
+		break_average += ((1.0f/NUM_BREAK_AVR) * break_avr_buffer[n]);
 	}
-	return average / NUM_BREAK_AVR;
+	return break_average;
 }
 
 uint16_t transform_exp(uint16_t value, uint16_t max_value, uint16_t exp){
 	uint16_t transformed_value = (pow(value, exp) / pow(max_value, (exp-1)));
-	if(transformed_value > max_value){
-		transformed_value = max_value;
+	if(transformed_value > KICK_MAX){
+		transformed_value = KICK_MAX;
 	}
 	return transformed_value;
 }
