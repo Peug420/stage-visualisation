@@ -23,6 +23,8 @@
 #include "i2c.h"
 #include "sai.h"
 #include "tim.h"
+#include "usb_device.h"
+#include "usbd_cdc_if.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -30,8 +32,6 @@
 #include <stdint.h>
 #include "Codec.h"
 #include "dsp/filtering_functions.h"
-//#include "iir_break"	// iir filter coefficients
-//#include "iir_kick_96.h"			//#################################
 #include "iir_filter.h"
 /* USER CODE END Includes */
 
@@ -92,6 +92,8 @@ uint32_t 	break_value = 0;
 uint16_t 	kick_avr = 0;
 uint16_t    break_avr = 0;
 uint16_t 	kick_transformed = 0;
+
+uint8_t data[] = "Hello from STM32F746G-DISCO\n";
 
 //arrays
 uint16_t 	break_avr_buffer[NUM_BREAK_AVR];
@@ -172,6 +174,7 @@ int main(void)
   MX_SAI1_Init();
   MX_ADC1_Init();
   MX_TIM5_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
   HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*) PlaybackBuffer, RECORD_BUFFER_SIZE);
   HAL_SAI_Receive_DMA(&hsai_BlockB1, (uint8_t*) RecordBuffer, RECORD_BUFFER_SIZE);
@@ -188,9 +191,9 @@ int main(void)
   {
     /* USER CODE END WHILE */
 	  if(dataReadyFlag){
-	  		  ProcessData();
-	  		  dataReadyFlag = 0;
-	  	  }
+		  ProcessData();
+		  dataReadyFlag = 0;
+	  }
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -219,7 +222,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLM = 25;
   RCC_OscInitStruct.PLL.PLLN = 432;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 4;
+  RCC_OscInitStruct.PLL.PLLQ = 9;
   RCC_OscInitStruct.PLL.PLLR = 2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -297,6 +300,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 
 void ProcessData(){
 
+	CDC_Transmit_FS(data, sizeof(data) - 1);
 	//HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);//LD1
 	HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_SET);	//LD2
 	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);//LD3
@@ -383,15 +387,15 @@ void ProcessData(){
 
 	 if ((KICK_VAL < kick_transformed) && (kick_transformed > (kick_ema * KICK_THRESH))){ //and not (break_energy_value < break_threshold): # detect beat
 		 if(beat_history(1) == 1){
-		 	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);//LD3
+		 	 //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);//LD3
 		 }
 		 else{
-			 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+			 //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
 		 }
 	 }
 	 else{
 		 beat_history(0);
-		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+		 //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
 	 }
 
 	 break_avr         	= cal_break_avr(break_value);
