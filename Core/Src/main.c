@@ -186,11 +186,18 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  uint8_t data[] = "Hello, World!\n";
+  HAL_UART_Transmit(&huart1, data, sizeof(data), HAL_MAX_DELAY);
+
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  if(dataReadyFlag){
+	  	  		  ProcessData();
+	  	  		  dataReadyFlag = 0;
+	  	  	  }
   }
   /* USER CODE END 3 */
 }
@@ -296,7 +303,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 
 void ProcessData(){
 
-	CDC_Transmit_FS(data, sizeof(data) - 1);
 	//HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);//LD1
 	HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_SET);	//LD2
 	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);//LD3

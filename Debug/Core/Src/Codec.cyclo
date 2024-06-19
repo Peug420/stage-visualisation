@@ -1,2 +1,3 @@
 ../Core/Src/Codec.c:12:6:write_register	1
-../Core/Src/Codec.c:25:6:Codec	1
+../Core/Src/Codec.c:24:10:read_register	1
+../Core/Src/Codec.c:63:6:Codec	1

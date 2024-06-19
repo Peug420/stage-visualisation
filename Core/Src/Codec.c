@@ -21,11 +21,52 @@ void write_register(uint16_t register_pointer, uint16_t register_value)
     HAL_I2C_Master_Transmit(&hi2c4, CODECI2CADDRESS, data, 4, 100);  // data is the start pointer of our array
 }
 
+uint16_t read_register(uint16_t register_pointer)
+{
+    uint8_t data[4];
+
+    data[0] = register_pointer>>8;  // MSB byte of 16bit register
+    data[1] = register_pointer;  // LSB byte of 16bit register
+    data[2] = 0x00;    // MSB byte of 16bit data
+    data[3] = 0x00;       // LSB byte of 16bit data
+
+    //HAL_I2C_Master_Transmit(&hi2c4, CODECI2CADDRESS, data, 2, 100);  // data is the start pointer of our array
+    HAL_I2C_Master_Receive(&hi2c4, CODECI2CADDRESS, data, 4, 100);
+
+    return ((data[0] << 8) + data[1]);
+
+
+    //HAL_I2C_Master_Transmit(&hi2c4, CODECI2CADDRESS, data, 4, 100);  // data is the start pointer of our array
+}
+
+//uint16_t read_register(uint16_t register_pointer)
+//{
+//	  uint16_t reg_address = register_pointer;  // Beispielregisteradresse
+//	  uint8_t reg_value[2];  // 2 Byte für 16-Bit Registerwert
+//
+//	  // Lese ein 16-Bit Register des Audio-Codecs
+//	  if(HAL_I2C_Mem_Read(&hi2c4, (uint16_t)(CODECI2CADDRESS), reg_address, I2C_MEMADD_SIZE_16BIT, reg_value, 2, HAL_MAX_DELAY) == HAL_OK)
+//	  {
+//	    // Erfolgreiches Lesen
+//	    uint16_t value = (reg_value[0] << 8) | reg_value[1];  // 16-Bit Wert zusammensetzen
+//	    return value;
+//	  }
+//	  else
+//	  {
+//	    return 0xFFFF;
+//		  // Fehlerbehandlung
+//	  }
+//
+//}
+
 
 void Codec(void){
 
 	/*Reset all Registers*/
 	write_register(0x0000, 0x0000);
+
+	volatile uint16_t temp = 0x0000;
+	temp = read_register(0x0210);
 
 	/* wm8994 Errata Work-Arounds */
 	write_register(0x102, 0x0003);
