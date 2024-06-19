@@ -23,8 +23,7 @@
 #include "i2c.h"
 #include "sai.h"
 #include "tim.h"
-#include "usb_device.h"
-#include "usbd_cdc_if.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -174,7 +173,7 @@ int main(void)
   MX_SAI1_Init();
   MX_ADC1_Init();
   MX_TIM5_Init();
-  MX_USB_DEVICE_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   HAL_SAI_Transmit_DMA(&hsai_BlockA1, (uint8_t*) PlaybackBuffer, RECORD_BUFFER_SIZE);
   HAL_SAI_Receive_DMA(&hsai_BlockB1, (uint8_t*) RecordBuffer, RECORD_BUFFER_SIZE);
@@ -190,10 +189,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  if(dataReadyFlag){
-		  ProcessData();
-		  dataReadyFlag = 0;
-	  }
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
