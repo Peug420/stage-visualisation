@@ -32,6 +32,7 @@
 #include "Codec.h"
 #include "dsp/filtering_functions.h"
 #include "iir_filter.h"
+#include "Yin.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,7 +46,8 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define RECORD_BUFFER_SIZE 4096 // 1024*4=4096 bei 96khz (x2stereo + x2 double buffer = x4)                 (512*4=2048 bei 48khz)
+#define RECORD_BUFFER_SIZE 1024//4096 // 1024*4=4096 bei 96khz (x2stereo + x2 double buffer = x4)                 (512*4=2048 bei 48khz)
+#define YIN_BUFFER_SIZE 256 //1024
 #define MIN_ENERGY 1000 	//2000
 #define NUM_SHORT_AVR 4 	//4
 #define NUM_BREAK_AVR 100 	//100
@@ -66,8 +68,8 @@
 //float32_t state_L_kick[2*STAGES];
 //float32_t state_R_kick[2*STAGES];
 //float32_t state_kick[2*STAGES];//old with iir_kick_96							//#################################
-//float32_t state_L_melody[2*STAGES];
-//float32_t state_R_melody[2*STAGES];
+float32_t state_L_melody[2*STAGES];
+float32_t state_R_melody[2*STAGES];
 
 float32_t state_break[2*STAGES];
 float32_t state_kick[4*STAGES];//4*5Stages (2*10stages)
@@ -76,8 +78,8 @@ float32_t state_kick[4*STAGES];//4*5Stages (2*10stages)
 //arm_biquad_cascade_df2T_instance_f32 IIR_R_break;
 //arm_biquad_cascade_df2T_instance_f32 IIR_L_kick;
 //arm_biquad_cascade_df2T_instance_f32 IIR_R_kick;
-//arm_biquad_cascade_df2T_instance_f32 IIR_L_melody;
-//arm_biquad_cascade_df2T_instance_f32 IIR_R_melody;
+arm_biquad_cascade_df2T_instance_f32 IIR_L_melody;
+arm_biquad_cascade_df2T_instance_f32 IIR_R_melody;
 arm_biquad_cascade_df2T_instance_f32 IIR_break; 			//#################################
 arm_biquad_cascade_df2T_instance_f32 IIR_kick; 			//#################################
 
@@ -88,9 +90,16 @@ int16_t  	slope_ema = 0;
 uint16_t 	slope_old_energy = 0;
 uint32_t 	kick_value = 0;
 uint32_t 	break_value = 0;
+uint32_t 	mel_L_value = 0;
+uint32_t 	mel_R_value = 0; //#################### # # #
+int32_t 	melody_value = 0;
 uint16_t 	kick_avr = 0;
 uint16_t    break_avr = 0;
 uint16_t 	kick_transformed = 0;
+uint16_t 	melodybufferpos = 0;
+
+Yin yin;
+float pitch;
 
 uint8_t data[] = "Hello from STM32F746G-DISCO\n";
 
@@ -101,8 +110,9 @@ uint8_t		beat_hist_buffer[NUM_BEAT_HIST];
 
 int16_t RecordBuffer[RECORD_BUFFER_SIZE];
 int16_t PlaybackBuffer[RECORD_BUFFER_SIZE];
-int16_t left_channel[RECORD_BUFFER_SIZE];
-int16_t right_channel[RECORD_BUFFER_SIZE];
+int16_t MelodyBuffer[YIN_BUFFER_SIZE];
+//int16_t left_channel[RECORD_BUFFER_SIZE];
+//int16_t right_channel[RECORD_BUFFER_SIZE];
 static volatile int16_t *RecordBufferPtr = &RecordBuffer;
 static volatile int16_t *PlaybackBufferPtr = &PlaybackBuffer;
 
@@ -118,6 +128,7 @@ void SystemClock_Config(void);
 void PeriphCommonClock_Config(void);
 /* USER CODE BEGIN PFP */
 void ProcessData();
+void CalYin();
 
 uint16_t cal_short_avr(uint16_t energy);
 uint16_t transform_exp(uint16_t value, uint16_t max_value, uint16_t exp);
@@ -143,8 +154,12 @@ int main(void)
 	//arm_biquad_cascade_df2T_init_f32(&IIR_L_kick, STAGES, ba_coeff, state_L_kick);
 	//arm_biquad_cascade_df2T_init_f32(&IIR_R_kick, STAGES, ba_coeff, state_R_kick);
 	//arm_biquad_cascade_df2T_init_f32(&IIR_kick, STAGES, ba_coeff, state_kick); //old with iir_kick_96	   //#################################
-	arm_biquad_cascade_df2T_init_f32(&IIR_break, STAGES,   ba_coeff_break, state_break);
-	arm_biquad_cascade_df2T_init_f32(&IIR_kick,  2*STAGES, ba_coeff_kick,  state_kick);
+	arm_biquad_cascade_df2T_init_f32(&IIR_L_melody, STAGES, ba_coeff_melody, state_L_melody);
+	arm_biquad_cascade_df2T_init_f32(&IIR_R_melody, STAGES, ba_coeff_melody, state_R_melody);
+	arm_biquad_cascade_df2T_init_f32(&IIR_break, 	STAGES,   ba_coeff_break,  state_break);
+	arm_biquad_cascade_df2T_init_f32(&IIR_kick,  	2*STAGES, ba_coeff_kick,   state_kick);
+
+	Yin_init(&yin, (YIN_BUFFER_SIZE), 0.5); //initialize yin algorithm
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -195,9 +210,11 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	  if(dataReadyFlag){
-	  	  		  ProcessData();
-	  	  		  dataReadyFlag = 0;
-	  	  	  }
+		  ProcessData();
+
+		  dataReadyFlag = 0;
+	  }
+	  CalYin();
   }
   /* USER CODE END 3 */
 }
@@ -312,7 +329,7 @@ void ProcessData(){
 	 volatile static float kickOut;
 	 volatile static float breakOut;
 	 volatile static float leftOut, rightOut;
-	 volatile static float kick_leftOut, kick_rightOut;
+	 volatile static float melody_leftOut, melody_rightOut;
 	// uint16_t kick = 0;
 	 //uint16_t right = 0;
 
@@ -344,10 +361,10 @@ void ProcessData(){
 	 		monoIn = (1.0f/32768.0f) * ((RecordBufferPtr[i] + RecordBufferPtr[i+1]) / 2);
 
 	 		/*Do some processing*/
-	 		//arm_biquad_cascade_df2T_f32(&IIR_L_kick, &leftIn, &kick_leftOut, 1);
-	 		//arm_biquad_cascade_df2T_f32(&IIR_R_kick, &rightIn, &kick_rightOut, 1);
+	 		arm_biquad_cascade_df2T_f32(&IIR_L_melody, &leftIn,  &melody_leftOut,  1);
+	 		arm_biquad_cascade_df2T_f32(&IIR_R_melody, &rightIn, &melody_rightOut, 1);
 
-	 		arm_biquad_cascade_df2T_f32(&IIR_kick, &monoIn, &kickOut, 1);			//#################################
+	 		arm_biquad_cascade_df2T_f32(&IIR_kick, &monoIn, &kickOut, 1);
 	 		arm_biquad_cascade_df2T_f32(&IIR_break, &monoIn, &breakOut, 1);
 
 	 		//kick_leftOut  = fabs(leftOut);
@@ -363,8 +380,16 @@ void ProcessData(){
 
 	 		//kick_value += (left + right) / 2;
 	 		//kick_value += (left + right);
+	 		mel_L_value += ((32768.0f * fabs(melody_leftOut))*2);
+	 		mel_R_value += ((32768.0f * fabs(melody_rightOut))*2);
 	 		kick_value 	+= ((32768.0f * fabs(kickOut)) 	* 2);
 	 		break_value += ((32768.0f * fabs(breakOut)) * 2);
+	 		melody_value = (32768.0f * ((melody_leftOut + melody_rightOut)/2));
+
+	 		MelodyBuffer[melodybufferpos] = melody_value;
+	 		melodybufferpos++;
+
+
 	 		//break_value += (uint16_t)((fabs(break_leftOut) + fabs(break_rightOut)) / 2);
 
 	 		//leftOut = leftIn;
@@ -375,8 +400,6 @@ void ProcessData(){
 	 		PlaybackBufferPtr[i+1] 	= (int16_t) (1000.0f * rightIn); //(32768.0f * rightIn)
 
 	 		//kick_value = fabs(PlaybackBufferPtr[i]) + fabs(PlaybackBufferPtr[i+1]);
-
-
 	 }
 
 	 kick_value = kick_value / (RECORD_BUFFER_SIZE/4);
@@ -415,6 +438,15 @@ void ProcessData(){
 	 //HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);
 	 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_5, GPIO_PIN_RESET);
 	 //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+}
+
+void CalYin(){
+	if(melodybufferpos >= YIN_BUFFER_SIZE){
+			 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
+			 melodybufferpos = 0;
+			 pitch = Yin_getPitch(&yin, MelodyBuffer);
+			 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);
+		 }
 }
 
 uint16_t cal_short_avr(uint16_t energy){
