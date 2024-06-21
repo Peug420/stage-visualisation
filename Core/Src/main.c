@@ -29,6 +29,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdint.h>
+#include <stdio.h>
 #include "Codec.h"
 #include "dsp/filtering_functions.h"
 #include "iir_filter.h"
@@ -58,6 +59,8 @@
 #define BREAK_DIF 0.8 		//0.8
 #define BREAK_THRESH 7000 	//7000
 #define BREAK_SLOPE 1000 		//10
+
+#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -101,8 +104,6 @@ uint16_t 	melodybufferpos = 0;
 Yin yin;
 float pitch;
 
-uint8_t data[] = "Hello from STM32F746G-DISCO\n";
-
 //arrays
 uint16_t 	break_avr_buffer[NUM_BREAK_AVR];
 uint16_t 	short_avr_buffer[NUM_SHORT_AVR];
@@ -136,6 +137,7 @@ uint16_t cal_ema(uint16_t new_value, float alpha, uint16_t previous_ema);
 uint8_t beat_history(uint8_t is_beat);
 uint16_t cal_break_avr(uint16_t energy);
 int16_t cal_slope(uint16_t energy);
+void OutputUart(int output);
 
 /* USER CODE END PFP */
 
@@ -151,15 +153,7 @@ int16_t cal_slope(uint16_t energy);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	//arm_biquad_cascade_df2T_init_f32(&IIR_L_kick, STAGES, ba_coeff, state_L_kick);
-	//arm_biquad_cascade_df2T_init_f32(&IIR_R_kick, STAGES, ba_coeff, state_R_kick);
-	//arm_biquad_cascade_df2T_init_f32(&IIR_kick, STAGES, ba_coeff, state_kick); //old with iir_kick_96	   //#################################
-	arm_biquad_cascade_df2T_init_f32(&IIR_L_melody, STAGES, ba_coeff_melody, state_L_melody);
-	arm_biquad_cascade_df2T_init_f32(&IIR_R_melody, STAGES, ba_coeff_melody, state_R_melody);
-	arm_biquad_cascade_df2T_init_f32(&IIR_break, 	STAGES,   ba_coeff_break,  state_break);
-	arm_biquad_cascade_df2T_init_f32(&IIR_kick,  	2*STAGES, ba_coeff_kick,   state_kick);
 
-	Yin_init(&yin, (YIN_BUFFER_SIZE), 0.5); //initialize yin algorithm
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -168,7 +162,12 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+  arm_biquad_cascade_df2T_init_f32(&IIR_L_melody, STAGES, ba_coeff_melody, state_L_melody);
+  arm_biquad_cascade_df2T_init_f32(&IIR_R_melody, STAGES, ba_coeff_melody, state_R_melody);
+  arm_biquad_cascade_df2T_init_f32(&IIR_break, 	STAGES,   ba_coeff_break,  state_break);
+  arm_biquad_cascade_df2T_init_f32(&IIR_kick,  	2*STAGES, ba_coeff_kick,   state_kick);
 
+  Yin_init(&yin, (YIN_BUFFER_SIZE), 0.5); //initialize yin algorithm
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -197,12 +196,13 @@ int main(void)
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*) AdcValues, 3);
 
   Codec();
+
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  uint8_t data[] = "Hello, World!\n";
-  HAL_UART_Transmit(&huart1, data, sizeof(data), HAL_MAX_DELAY);
 
   while (1)
   {
@@ -293,6 +293,21 @@ void PeriphCommonClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/**
+  * @brief  Retargets the C library printf function to the USART.
+  *   None
+  * @retval None
+  */
+PUTCHAR_PROTOTYPE
+{
+  /* Place your implementation of fputc here */
+  /* e.g. write a character to the USART1 and Loop until the end of transmission */
+  HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xFFFF);
+
+  return ch;
+}
+
 void HAL_SAI_RxHalfCpltCallback(SAI_HandleTypeDef *hsai){
 
 	RecordBufferPtr = &RecordBuffer[0];
@@ -328,7 +343,6 @@ void ProcessData(){
 	 volatile static float monoIn;
 	 volatile static float kickOut;
 	 volatile static float breakOut;
-	 volatile static float leftOut, rightOut;
 	 volatile static float melody_leftOut, melody_rightOut;
 	// uint16_t kick = 0;
 	 //uint16_t right = 0;
@@ -396,14 +410,17 @@ void ProcessData(){
 	 		//rightOut = rightIn; //return audio in to audio out
 
 	 		/*Convert back to int16*/
-	 		PlaybackBufferPtr[i] 	= (int16_t) (1000.0f * leftIn);  //(1000.0f * leftIn)
-	 		PlaybackBufferPtr[i+1] 	= (int16_t) (1000.0f * rightIn); //(32768.0f * rightIn)
+	 		PlaybackBufferPtr[i] 	= (int16_t) (1200.0f * leftIn);  //(1000.0f * leftIn)
+	 		PlaybackBufferPtr[i+1] 	= (int16_t) (1200.0f * rightIn); //(32768.0f * rightIn)
 
 	 		//kick_value = fabs(PlaybackBufferPtr[i]) + fabs(PlaybackBufferPtr[i+1]);
 	 }
 
 	 kick_value = kick_value / (RECORD_BUFFER_SIZE/4);
 	 break_value = break_value / (RECORD_BUFFER_SIZE/4);
+	 //OutputUart(kick_value);
+	 printf("Hello World\n\r");
+	 //printf(kick_value);
 
 	 kick_avr  			= cal_short_avr(kick_value);
 	 kick_transformed  	= transform_exp(kick_avr,KICK_VAL,4); //with old max energy: transform_exp(kick_avr,9000,4)
@@ -412,15 +429,15 @@ void ProcessData(){
 
 	 if ((KICK_VAL < kick_transformed) && (kick_transformed > (kick_ema * KICK_THRESH))){ //and not (break_energy_value < break_threshold): # detect beat
 		 if(beat_history(1) == 1){
-		 	 //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);//LD3
+		 	 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_SET);//LD3
 		 }
 		 else{
-			 //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+			 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
 		 }
 	 }
 	 else{
 		 beat_history(0);
-		 //HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+		 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
 	 }
 
 	 break_avr         	= cal_break_avr(break_value);
@@ -429,10 +446,10 @@ void ProcessData(){
 	 //if ((((BREAK_DIF < (break_avr / break_ema)) && (10 < cal_slope(break_ema))) || (break_ema > BREAK_THRESH)) && (!(break_ema < MIN_ENERGY) || !(BREAK_DIF > (break_avr/break_ema)))){
 	 //if (break_ema > BREAK_THRESH){
 	 if ((((BREAK_DIF < (break_avr / break_ema)) && (BREAK_SLOPE < cal_slope(break_ema))) || (break_ema > BREAK_THRESH)) && (!(break_ema < MIN_ENERGY))){
-		 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
+		 //HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
 	 }
 	 else{
-		 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);
+		 //HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);
 	 }
 
 	 //HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);
@@ -522,6 +539,19 @@ uint8_t beat_history(uint8_t is_beat) {
 
     return is_beat; // Rückgabe des aktuellen beat_hist
 }
+
+/*
+void OutputUart(int output){ //Output string detection to uart (baud rate 460800)
+	char outputarray[30];//[50]; 				//output array for uart output
+	if(output != 0){ //OUTPUT string detected
+		sprintf(outputarray, "\n\r String: %d ", output);
+		HAL_UART_Transmit(&huart1, outputarray, 30, HAL_MAX_DELAY); //sizeof(outputarray)
+	//uint8_t data[] = "Hello, World!\n";
+	}
+
+}
+*/
+
 
 /* USER CODE END 4 */
 
