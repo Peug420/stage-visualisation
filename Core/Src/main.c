@@ -48,7 +48,7 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 #define RECORD_BUFFER_SIZE 1024//4096 // 1024*4=4096 bei 96khz (x2stereo + x2 double buffer = x4)                 (512*4=2048 bei 48khz)
-#define YIN_BUFFER_SIZE 256 //1024
+#define YIN_BUFFER_SIZE 512 //256 //1024
 #define MIN_ENERGY 1000 	//2000
 #define NUM_SHORT_AVR 4 	//4
 #define NUM_BREAK_AVR 100 	//100
@@ -90,6 +90,7 @@ arm_biquad_cascade_df2T_instance_f32 IIR_kick; 			//############################
 uint16_t 	kick_ema = 0;
 uint16_t 	break_ema = 0;
 int16_t  	slope_ema = 0;
+int16_t  	pitch_ema = 0;
 uint16_t 	slope_old_energy = 0;
 uint32_t 	kick_value = 0;
 uint32_t 	break_value = 0;
@@ -344,7 +345,7 @@ void ProcessData(){
 	 volatile static float kickOut;
 	 volatile static float breakOut;
 	 volatile static float melody_leftOut, melody_rightOut;
-	// uint16_t kick = 0;
+	 //uint16_t kick = 0;
 	 //uint16_t right = 0;
 
 	 //volatile static float break_leftOut, break_rightOut;
@@ -410,8 +411,17 @@ void ProcessData(){
 	 		//rightOut = rightIn; //return audio in to audio out
 
 	 		/*Convert back to int16*/
-	 		PlaybackBufferPtr[i] 	= (int16_t) (1200.0f * leftIn);  //(1000.0f * leftIn)
-	 		PlaybackBufferPtr[i+1] 	= (int16_t) (1200.0f * rightIn); //(32768.0f * rightIn)
+	 		PlaybackBufferPtr[i] 	= (int16_t) (1000.0f * melody_leftOut);  //(1000.0f * leftIn) 400-1500 Hz
+	 		PlaybackBufferPtr[i+1] 	= (int16_t) (1000.0f * melody_rightOut); //(32768.0f * rightIn)
+
+	 		//PlaybackBufferPtr[i] 	= (int16_t) (32768.0f * kickOut);  //(1000.0f * leftIn) 100-300Hz
+	 		//PlaybackBufferPtr[i+1] 	= (int16_t) (32768.0f * kickOut); //(32768.0f * rightIn)
+
+	 		//PlaybackBufferPtr[i] 	= (int16_t) (32768.0f * breakOut);  //(1000.0f * leftIn) 0-300 Hz
+	 		//PlaybackBufferPtr[i+1] 	= (int16_t) (32768.0f * breakOut); //(32768.0f * rightIn)
+
+	 		//PlaybackBufferPtr[i] 	= (int16_t) (1200.0f * leftIn);  //(1000.0f * leftIn)
+	 		//PlaybackBufferPtr[i+1] 	= (int16_t) (1200.0f * rightIn); //(32768.0f * rightIn)
 
 	 		//kick_value = fabs(PlaybackBufferPtr[i]) + fabs(PlaybackBufferPtr[i+1]);
 	 }
@@ -419,7 +429,8 @@ void ProcessData(){
 	 kick_value = kick_value / (RECORD_BUFFER_SIZE/4);
 	 break_value = break_value / (RECORD_BUFFER_SIZE/4);
 	 //OutputUart(kick_value);
-	 printf("Hello World\n\r");
+	 //printf("%u\r\n",kick_value);
+	 //printf("Hello World %u\r\n",kick_value);
 	 //printf(kick_value);
 
 	 kick_avr  			= cal_short_avr(kick_value);
@@ -462,6 +473,9 @@ void CalYin(){
 			 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_SET);
 			 melodybufferpos = 0;
 			 pitch = Yin_getPitch(&yin, MelodyBuffer);
+			 int16_t pitch_int = pitch;
+			 pitch_ema         	= cal_ema(pitch_int, 0.1, pitch_ema);
+			 printf("pitch: %d\r\n",pitch_ema);
 			 HAL_GPIO_WritePin(GPIOJ, GPIO_PIN_13, GPIO_PIN_RESET);
 		 }
 }
